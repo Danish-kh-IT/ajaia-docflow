@@ -1,0 +1,736 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ajaia DocFlow — Collaborative Document Editor</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      .editor-surface {
+        min-height: 520px;
+        outline: none;
+        line-height: 1.65;
+      }
+      .editor-surface h1 {
+        font-size: 1.875rem;
+        font-weight: 700;
+        margin: 0.75rem 0 0.5rem;
+        color: #0f172a;
+      }
+      .editor-surface h2 {
+        font-size: 1.375rem;
+        font-weight: 600;
+        margin: 0.65rem 0 0.4rem;
+        color: #1e293b;
+      }
+      .editor-surface h3 {
+        font-size: 1.125rem;
+        font-weight: 600;
+        margin: 0.5rem 0 0.35rem;
+        color: #334155;
+      }
+      .editor-surface p {
+        margin: 0.4rem 0;
+        color: #1e293b;
+      }
+      .editor-surface ul {
+        list-style-type: disc;
+        padding-left: 1.5rem;
+        margin: 0.5rem 0;
+      }
+      .editor-surface ol {
+        list-style-type: decimal;
+        padding-left: 1.5rem;
+        margin: 0.5rem 0;
+      }
+      .editor-surface code {
+        background: #f1f5f9;
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.875em;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-slate-100 text-slate-800 h-screen flex flex-col overflow-hidden"
+  >
+    <!-- Top Header -->
+    <header
+      class="bg-white border-b border-slate-200 px-5 py-3 flex items-center justify-between shrink-0"
+    >
+      <div class="flex items-center gap-3">
+        <div
+          class="w-9 h-9 rounded-lg bg-indigo-600 text-white font-bold flex items-center justify-center shadow-sm"
+        >
+          D
+        </div>
+        <div>
+          <h1 class="font-bold text-slate-900 text-base leading-tight">
+            Ajaia DocFlow
+          </h1>
+          <p class="text-xs text-slate-500">
+            Lightweight Collaborative Document Workspace
+          </p>
+        </div>
+      </div>
+
+      <!-- Active User Switcher -->
+      <div class="flex items-center gap-3">
+        <span class="text-xs font-medium text-slate-500 hidden sm:inline"
+          >Active Session:</span
+        >
+        <select
+          id="userSelect"
+          onchange="switchUser(this.value)"
+          class="text-sm bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        ></select>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <div class="flex flex-1 overflow-hidden">
+      <!-- Left Sidebar -->
+      <aside
+        class="w-72 bg-white border-r border-slate-200 flex flex-col shrink-0"
+      >
+        <div class="p-4 border-b border-slate-200 space-y-2">
+          <button
+            onclick="createNewDoc()"
+            class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium text-sm py-2 px-3 rounded-lg shadow-sm transition flex items-center justify-center gap-2"
+          >
+            <span>+ New Document</span>
+          </button>
+
+          <label
+            class="w-full bg-slate-50 hover:bg-slate-100 border border-dashed border-slate-300 text-slate-700 font-medium text-xs py-2 px-3 rounded-lg cursor-pointer transition flex flex-col items-center justify-center text-center"
+          >
+            <span>Upload File to New Doc</span>
+            <span class="text-[11px] text-slate-400 mt-0.5"
+              >Supports .txt, .md, .docx (Max 5MB)</span
+            >
+            <input
+              type="file"
+              id="fileUploadInput"
+              accept=".txt,.md,.docx"
+              class="hidden"
+              onchange="handleFileUpload(event)"
+            />
+          </label>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-3 space-y-5">
+          <!-- Owned Docs -->
+          <div>
+            <div class="flex items-center justify-between px-2 mb-1.5">
+              <span
+                class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+                >Owned by Me</span
+              >
+              <span
+                id="ownedCount"
+                class="text-xs bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded"
+                >0</span
+              >
+            </div>
+            <div id="ownedList" class="space-y-1"></div>
+          </div>
+
+          <!-- Shared Docs -->
+          <div>
+            <div class="flex items-center justify-between px-2 mb-1.5">
+              <span
+                class="text-xs font-semibold uppercase tracking-wider text-slate-400"
+                >Shared with Me</span
+              >
+              <span
+                id="sharedCount"
+                class="text-xs bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded"
+                >0</span
+              >
+            </div>
+            <div id="sharedList" class="space-y-1"></div>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Editor Canvas -->
+      <main class="flex-1 flex flex-col overflow-hidden bg-slate-100">
+        <!-- Document Sub-header & Toolbar -->
+        <div
+          id="editorHeader"
+          class="bg-white border-b border-slate-200 px-6 py-3 space-y-3 shrink-0 hidden"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-3">
+            <div class="flex items-center gap-2.5 flex-1 min-w-[220px]">
+              <input
+                id="docTitleInput"
+                type="text"
+                placeholder="Document Title"
+                oninput="markDirty()"
+                class="text-lg font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-indigo-500 focus:outline-none px-1 py-0.5 w-full max-w-md"
+              />
+              <span
+                id="accessBadge"
+                class="text-xs font-semibold px-2.5 py-0.5 rounded-full"
+              ></span>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <span id="saveStatus" class="text-xs text-slate-400 mr-2"
+                >Saved</span
+              >
+              <button
+                id="exportMdBtn"
+                onclick="exportMarkdown()"
+                class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-700 font-medium px-3 py-1.5 rounded-lg transition"
+              >
+                Export .md
+              </button>
+              <button
+                id="shareBtn"
+                onclick="openShareModal()"
+                class="text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-3 py-1.5 rounded-lg border border-indigo-200 transition"
+              >
+                Share
+              </button>
+              <button
+                id="saveBtn"
+                onclick="saveCurrentDoc()"
+                class="text-xs bg-indigo-600 hover:bg-indigo-700 text-white font-semibold px-3.5 py-1.5 rounded-lg shadow-sm transition"
+              >
+                Save
+              </button>
+              <button
+                id="deleteBtn"
+                onclick="deleteCurrentDoc()"
+                class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-600 font-medium px-2.5 py-1.5 rounded-lg transition"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+
+          <!-- Rich-Text Formatting Toolbar -->
+          <div
+            id="formattingToolbar"
+            class="flex flex-wrap items-center gap-1 pt-2 border-t border-slate-100"
+          >
+            <button
+              type="button"
+              onclick="execFmt('formatBlock', 'H1')"
+              class="px-2.5 py-1 text-xs font-bold rounded hover:bg-slate-100 border border-slate-200"
+            >
+              H1
+            </button>
+            <button
+              type="button"
+              onclick="execFmt('formatBlock', 'H2')"
+              class="px-2.5 py-1 text-xs font-bold rounded hover:bg-slate-100 border border-slate-200"
+            >
+              H2
+            </button>
+            <button
+              type="button"
+              onclick="execFmt('formatBlock', 'P')"
+              class="px-2.5 py-1 text-xs rounded hover:bg-slate-100 border border-slate-200"
+            >
+              Normal
+            </button>
+            <div class="h-4 w-px bg-slate-200 mx-1"></div>
+            <button
+              type="button"
+              onclick="execFmt('bold')"
+              class="px-2.5 py-1 text-xs font-bold rounded hover:bg-slate-100 border border-slate-200"
+            >
+              B
+            </button>
+            <button
+              type="button"
+              onclick="execFmt('italic')"
+              class="px-2.5 py-1 text-xs italic font-serif rounded hover:bg-slate-100 border border-slate-200"
+            >
+              I
+            </button>
+            <button
+              type="button"
+              onclick="execFmt('underline')"
+              class="px-2.5 py-1 text-xs underline rounded hover:bg-slate-100 border border-slate-200"
+            >
+              U
+            </button>
+            <div class="h-4 w-px bg-slate-200 mx-1"></div>
+            <button
+              type="button"
+              onclick="execFmt('insertUnorderedList')"
+              class="px-2.5 py-1 text-xs rounded hover:bg-slate-100 border border-slate-200"
+            >
+              • Bullet List
+            </button>
+            <button
+              type="button"
+              onclick="execFmt('insertOrderedList')"
+              class="px-2.5 py-1 text-xs rounded hover:bg-slate-100 border border-slate-200"
+            >
+              1. Numbered List
+            </button>
+            <span
+              id="metaInfo"
+              class="ml-auto text-[11px] text-slate-400"
+            ></span>
+          </div>
+        </div>
+
+        <!-- Page Sheet -->
+        <div id="editorWrapper" class="flex-1 overflow-y-auto p-6 hidden">
+          <div
+            class="max-w-3xl mx-auto bg-white rounded-xl shadow-sm border border-slate-200 p-8 sm:p-12"
+          >
+            <div
+              id="editorSurface"
+              class="editor-surface"
+              contenteditable="true"
+              oninput="markDirty()"
+            ></div>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div
+          id="emptyState"
+          class="flex-1 flex flex-col items-center justify-center text-center p-6"
+        >
+          <p class="text-slate-500 font-medium">No document selected</p>
+          <p class="text-xs text-slate-400 mt-1">
+            Create a new document, upload a .txt/.md/.docx file, or pick one
+            from the left sidebar.
+          </p>
+        </div>
+      </main>
+    </div>
+
+    <!-- Toast Banner -->
+    <div
+      id="toast"
+      class="fixed bottom-4 right-4 bg-slate-900 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg hidden z-50"
+    ></div>
+
+    <!-- Share Modal -->
+    <div
+      id="shareModal"
+      class="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 hidden z-40"
+    >
+      <div class="bg-white rounded-xl shadow-xl max-w-md w-full p-6 space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="font-bold text-slate-900">Share Document</h3>
+          <button
+            onclick="closeShareModal()"
+            class="text-slate-400 hover:text-slate-600 text-sm"
+          >
+            ✕
+          </button>
+        </div>
+
+        <p class="text-xs text-slate-500">
+          Grant workspace teammates access. Demo accounts:
+          <code class="bg-slate-100 px-1 rounded">alex@ajaia.demo</code>,
+          <code class="bg-slate-100 px-1 rounded">sara@ajaia.demo</code>,
+          <code class="bg-slate-100 px-1 rounded">danish@ajaia.demo</code>
+        </p>
+
+        <div class="flex gap-2">
+          <input
+            id="shareEmailInput"
+            type="email"
+            placeholder="teammate@ajaia.demo"
+            class="flex-1 text-sm border border-slate-300 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+          />
+          <select
+            id="sharePermSelect"
+            class="text-sm border border-slate-300 rounded-lg px-2.5 py-1.5 bg-white"
+          >
+            <option value="edit">Can Edit</option>
+            <option value="view">Can View</option>
+          </select>
+          <button
+            onclick="submitShare()"
+            class="bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-medium px-3.5 py-1.5 rounded-lg"
+          >
+            Share
+          </button>
+        </div>
+
+        <div class="border-t border-slate-100 pt-3">
+          <p class="text-xs font-semibold text-slate-500 mb-2">
+            People with access
+          </p>
+          <div
+            id="sharedPeopleList"
+            class="space-y-2 max-h-44 overflow-y-auto"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      let activeUserId = localStorage.getItem("ajaia_user_id") || "usr_danish";
+      let users = [];
+      let currentDoc = null;
+      let isDirty = false;
+      let autoSaveTimer = null;
+
+      function showToast(msg, isError = false) {
+        const el = document.getElementById("toast");
+        el.textContent = msg;
+        el.className = `fixed bottom-4 right-4 text-white text-xs px-4 py-2.5 rounded-lg shadow-lg z-50 ${isError ? "bg-rose-600" : "bg-slate-900"}`;
+        el.classList.remove("hidden");
+        setTimeout(() => el.classList.add("hidden"), 3200);
+      }
+
+      async function api(path, options = {}) {
+        const headers = {
+          ...(options.headers || {}),
+          "X-User-Id": activeUserId,
+        };
+        if (!(options.body instanceof FormData)) {
+          headers["Content-Type"] = "application/json";
+        }
+        const res = await fetch(path, { ...options, headers });
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.detail || "Request failed");
+        }
+        return data;
+      }
+
+      async function init() {
+        const data = await api("/api/users");
+        users = data.users;
+        const select = document.getElementById("userSelect");
+        select.innerHTML = users
+          .map(
+            (u) =>
+              `<option value="${u.id}" ${u.id === activeUserId ? "selected" : ""}>${u.name} (${u.email})</option>`,
+          )
+          .join("");
+        await refreshSidebar(true);
+      }
+
+      async function switchUser(newUserId) {
+        if (isDirty && currentDoc && currentDoc.access_level !== "view") {
+          await saveCurrentDoc(true);
+        }
+        activeUserId = newUserId;
+        localStorage.setItem("ajaia_user_id", activeUserId);
+        currentDoc = null;
+        await refreshSidebar(true);
+        showToast("Switched active user session");
+      }
+
+      async function refreshSidebar(autoSelectFirst = false) {
+        const { owned, shared } = await api("/api/documents");
+        document.getElementById("ownedCount").textContent = owned.length;
+        document.getElementById("sharedCount").textContent = shared.length;
+
+        document.getElementById("ownedList").innerHTML = owned.length
+          ? owned.map((d) => renderDocItem(d, true)).join("")
+          : `<p class="text-xs text-slate-400 px-2 py-1">No owned documents yet.</p>`;
+
+        document.getElementById("sharedList").innerHTML = shared.length
+          ? shared.map((d) => renderDocItem(d, false)).join("")
+          : `<p class="text-xs text-slate-400 px-2 py-1">Nothing shared with you yet.</p>`;
+
+        if (autoSelectFirst) {
+          const first = owned[0] || shared[0];
+          if (first) {
+            await openDocument(first.id);
+          } else {
+            renderEmptyState();
+          }
+        }
+      }
+
+      function renderDocItem(doc, isOwned) {
+        const active = currentDoc && currentDoc.id === doc.id;
+        const badge = isOwned
+          ? doc.share_count > 0
+            ? `<span class="text-[10px] bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded">Shared (${doc.share_count})</span>`
+            : ""
+          : `<span class="text-[10px] bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded uppercase">${doc.access_level}</span>`;
+
+        return `
+        <button onclick="openDocument('${doc.id}')"
+          class="w-full text-left px-2.5 py-2 rounded-lg transition flex items-start justify-between gap-2 ${active ? "bg-indigo-50 text-indigo-900 font-medium" : "hover:bg-slate-50 text-slate-700"}">
+          <div class="min-w-0">
+            <div class="text-xs truncate">${escapeHtml(doc.title)}</div>
+            <div class="text-[10px] text-slate-400 truncate mt-0.5">
+              ${isOwned ? "Owner: You" : `By ${escapeHtml(doc.owner_name)}`}
+            </div>
+          </div>
+          ${badge}
+        </button>
+      `;
+      }
+
+      function renderEmptyState() {
+        document.getElementById("editorHeader").classList.add("hidden");
+        document.getElementById("editorWrapper").classList.add("hidden");
+        document.getElementById("emptyState").classList.remove("hidden");
+      }
+
+      async function openDocument(docId) {
+        try {
+          if (isDirty && currentDoc && currentDoc.access_level !== "view") {
+            await saveCurrentDoc(true);
+          }
+          const doc = await api(`/api/documents/${docId}`);
+          currentDoc = doc;
+          isDirty = false;
+
+          document.getElementById("emptyState").classList.add("hidden");
+          document.getElementById("editorHeader").classList.remove("hidden");
+          document.getElementById("editorWrapper").classList.remove("hidden");
+
+          const titleInput = document.getElementById("docTitleInput");
+          const surface = document.getElementById("editorSurface");
+          titleInput.value = doc.title;
+          surface.innerHTML = doc.content;
+
+          const isOwner = doc.access_level === "owner";
+          const canEdit = isOwner || doc.access_level === "edit";
+
+          titleInput.disabled = !canEdit;
+          surface.contentEditable = canEdit ? "true" : "false";
+          document.getElementById("formattingToolbar").style.opacity = canEdit
+            ? "1"
+            : "0.45";
+          document.getElementById("formattingToolbar").style.pointerEvents =
+            canEdit ? "auto" : "none";
+          document
+            .getElementById("saveBtn")
+            .classList.toggle("hidden", !canEdit);
+          document
+            .getElementById("shareBtn")
+            .classList.toggle("hidden", !isOwner);
+          document
+            .getElementById("deleteBtn")
+            .classList.toggle("hidden", !isOwner);
+
+          const badge = document.getElementById("accessBadge");
+          if (isOwner) {
+            badge.textContent = "Owner";
+            badge.className =
+              "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700";
+          } else if (doc.access_level === "edit") {
+            badge.textContent = `Shared • Can Edit`;
+            badge.className =
+              "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700";
+          } else {
+            badge.textContent = `Shared • View Only`;
+            badge.className =
+              "text-xs font-semibold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700";
+          }
+
+          document.getElementById("metaInfo").textContent =
+            `Owner: ${doc.owner_name}${doc.source_filename ? ` • Imported from ${doc.source_filename}` : ""}`;
+          document.getElementById("saveStatus").textContent = "Saved";
+
+          await refreshSidebar(false);
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      function execFmt(command, value = null) {
+        document.getElementById("editorSurface").focus();
+        document.execCommand(command, false, value);
+        markDirty();
+      }
+
+      function markDirty() {
+        if (!currentDoc || currentDoc.access_level === "view") return;
+        isDirty = true;
+        document.getElementById("saveStatus").textContent =
+          "Unsaved changes...";
+        clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => saveCurrentDoc(true), 1800);
+      }
+
+      async function saveCurrentDoc(silent = false) {
+        if (!currentDoc || currentDoc.access_level === "view") return;
+        try {
+          const title =
+            document.getElementById("docTitleInput").value.trim() ||
+            "Untitled Document";
+          const content = document.getElementById("editorSurface").innerHTML;
+          const updated = await api(`/api/documents/${currentDoc.id}`, {
+            method: "PATCH",
+            body: JSON.stringify({ title, content }),
+          });
+          currentDoc = updated;
+          isDirty = false;
+          document.getElementById("saveStatus").textContent = "Saved";
+          await refreshSidebar(false);
+          if (!silent) showToast("Document saved");
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      async function createNewDoc() {
+        try {
+          const doc = await api("/api/documents", {
+            method: "POST",
+            body: JSON.stringify({
+              title: "Untitled Document",
+              content:
+                "<h1>Untitled Document</h1><p>Start typing your notes here...</p>",
+            }),
+          });
+          await openDocument(doc.id);
+          showToast("New document created");
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      async function deleteCurrentDoc() {
+        if (!currentDoc) return;
+        try {
+          await api(`/api/documents/${currentDoc.id}`, { method: "DELETE" });
+          currentDoc = null;
+          isDirty = false;
+          await refreshSidebar(true);
+          showToast("Document deleted");
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      async function handleFileUpload(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        const formData = new FormData();
+        formData.append("file", file);
+        try {
+          const doc = await api("/api/documents/import", {
+            method: "POST",
+            body: formData,
+          });
+          await openDocument(doc.id);
+          showToast(`Imported "${file.name}" into editable document`);
+        } catch (err) {
+          showToast(err.message, true);
+        } finally {
+          event.target.value = "";
+        }
+      }
+
+      function openShareModal() {
+        if (!currentDoc) return;
+        renderSharedPeople();
+        document.getElementById("shareModal").classList.remove("hidden");
+      }
+
+      function closeShareModal() {
+        document.getElementById("shareModal").classList.add("hidden");
+      }
+
+      function renderSharedPeople() {
+        const list = document.getElementById("sharedPeopleList");
+        const ownerRow = `
+        <div class="flex items-center justify-between text-xs bg-slate-50 px-3 py-2 rounded-lg">
+          <div>
+            <span class="font-semibold text-slate-800">${escapeHtml(currentDoc.owner_name)}</span>
+            <span class="text-slate-400 ml-1">(${escapeHtml(currentDoc.owner_email)})</span>
+          </div>
+          <span class="text-emerald-700 font-semibold">Owner</span>
+        </div>
+      `;
+        const sharedRows = (currentDoc.shared_with || [])
+          .map(
+            (s) => `
+        <div class="flex items-center justify-between text-xs border border-slate-200 px-3 py-2 rounded-lg">
+          <div>
+            <span class="font-medium text-slate-800">${escapeHtml(s.name)}</span>
+            <span class="text-slate-400 ml-1">(${escapeHtml(s.email)})</span>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="uppercase text-[10px] font-semibold bg-indigo-50 text-indigo-700 px-1.5 py-0.5 rounded">${s.permission}</span>
+            <button onclick="revokeShare('${s.user_id}')" class="text-rose-500 hover:text-rose-700 font-medium">Remove</button>
+          </div>
+        </div>
+      `,
+          )
+          .join("");
+
+        list.innerHTML = ownerRow + sharedRows;
+      }
+
+      async function submitShare() {
+        const email = document.getElementById("shareEmailInput").value.trim();
+        const permission = document.getElementById("sharePermSelect").value;
+        if (!email) return;
+        try {
+          currentDoc = await api(`/api/documents/${currentDoc.id}/share`, {
+            method: "POST",
+            body: JSON.stringify({ email, permission }),
+          });
+          document.getElementById("shareEmailInput").value = "";
+          renderSharedPeople();
+          await refreshSidebar(false);
+          showToast(`Shared with ${email} (${permission})`);
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      async function revokeShare(targetUserId) {
+        try {
+          currentDoc = await api(
+            `/api/documents/${currentDoc.id}/share/${targetUserId}`,
+            {
+              method: "DELETE",
+            },
+          );
+          renderSharedPeople();
+          await refreshSidebar(false);
+          showToast("Access revoked");
+        } catch (err) {
+          showToast(err.message, true);
+        }
+      }
+
+      function exportMarkdown() {
+        if (!currentDoc) return;
+        const title =
+          document.getElementById("docTitleInput").value.trim() || "document";
+        const text = document.getElementById("editorSurface").innerText;
+        const mdBlob = new Blob([`# ${title}\n\n${text}`], {
+          type: "text/markdown;charset=utf-8",
+        });
+        const url = URL.createObjectURL(mdBlob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.md`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+
+      function escapeHtml(str) {
+        return String(str).replace(
+          /[&<>"']/g,
+          (m) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[m],
+        );
+      }
+
+      init();
+    </script>
+  </body>
+</html>
